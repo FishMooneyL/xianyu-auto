@@ -432,12 +432,13 @@ class DBManager:
             ''')
 
             # 插入默认系统设置（不包括管理员密码，由reply_server.py初始化）
+            # 默认关闭登录滑动验证码，避免外联第三方验证码服务
             cursor.execute('''
             INSERT OR IGNORE INTO system_settings (key, value, description) VALUES
             ('theme_color', 'blue', '主题颜色'),
             ('registration_enabled', 'true', '是否开启用户注册'),
             ('show_default_login_info', 'true', '是否显示默认登录信息'),
-            ('login_captcha_enabled', 'true', '登录滑动验证码开关'),
+            ('login_captcha_enabled', 'false', '登录滑动验证码开关'),
             ('smtp_server', '', 'SMTP服务器地址'),
             ('smtp_port', '587', 'SMTP端口'),
             ('smtp_user', '', 'SMTP登录用户名（发件邮箱）'),
@@ -445,7 +446,7 @@ class DBManager:
             ('smtp_from', '', '发件人显示名（留空则使用用户名）'),
             ('smtp_use_tls', 'true', '是否启用TLS'),
             ('smtp_use_ssl', 'false', '是否启用SSL'),
-            ('qq_reply_secret_key', 'xianyu_qq_reply_2024', 'QQ回复消息API秘钥')
+            ('qq_reply_secret_key', '', 'QQ回复消息API秘钥（为空表示禁用外部调用）')
             ''')
 
             # 检查并升级数据库
@@ -622,7 +623,15 @@ class DBManager:
             raise
             
     def update_admin_user_id(self, cursor):
-        """更新admin用户ID"""
+        """用途：更新 admin 用户信息与历史数据绑定
+
+        入参：
+            cursor: SQLite 游标，必须处于事务中
+        返回值：None，仅执行数据库更新，不返回结果
+        业务约束：
+            - 禁止使用硬编码默认口令
+            - 仅当 ADMIN_PASSWORD 环境变量存在时创建管理员
+        """
         try:
             logger.info("开始更新admin用户ID...")
             # 创建默认admin用户（只在首次初始化时创建）
@@ -630,13 +639,17 @@ class DBManager:
             admin_exists = cursor.fetchone()[0] > 0
 
             if not admin_exists:
-                # 首次创建admin用户，设置默认密码
-                default_password_hash = hashlib.sha256("admin123".encode()).hexdigest()
+                admin_password = os.getenv("ADMIN_PASSWORD", "")
+                # 管理员初始化密码必须显式配置，避免默认口令
+                if not admin_password:
+                    logger.warning("未配置 ADMIN_PASSWORD，跳过默认管理员创建")
+                    return
+                default_password_hash = hashlib.sha256(admin_password.encode()).hexdigest()
                 cursor.execute('''
                 INSERT INTO users (username, email, password_hash) VALUES
                 ('admin', 'admin@localhost', ?)
                 ''', (default_password_hash,))
-                logger.info("创建默认admin用户，密码: admin123")
+                logger.info("创建默认admin用户（密码来自环境变量）")
 
             # 获取admin用户ID，用于历史数据绑定
             self._execute_sql(cursor, "SELECT id FROM users WHERE username = 'admin'")
@@ -2735,7 +2748,16 @@ class DBManager:
                 return False
 
     async def send_verification_email(self, email: str, code: str) -> bool:
-        """发送验证码邮件（支持SMTP和API两种方式）"""
+        """用途：发送验证码邮件（仅支持 SMTP）
+
+        入参：
+            email: 收件邮箱地址
+            code: 邮箱验证码文本
+        返回值：bool，发送成功返回 True，否则 False
+        业务约束：
+            - SMTP 配置不足或发送失败时直接返回失败
+            - 禁止回退到外部邮件 API，避免信息外发
+        """
         try:
             subject = "闲鱼自动回复系统 - 邮箱验证码"
             # 使用简单的纯文本邮件内容
@@ -2771,8 +2793,8 @@ class DBManager:
                 smtp_use_ssl = (self.get_system_setting('smtp_use_ssl') or 'false').lower() == 'true'
             except Exception as e:
                 logger.error(f"读取SMTP系统设置失败: {e}")
-                # 如果读取配置失败，使用API方式
-                return await self._send_email_via_api(email, subject, text_content)
+                # 外部邮件 API 已禁用，读取失败直接返回
+                return False
 
             # 检查SMTP配置是否完整
             if smtp_server and smtp_port and smtp_user and smtp_password:
@@ -2782,9 +2804,9 @@ class DBManager:
                                                      smtp_server, smtp_port, smtp_user,
                                                      smtp_password, smtp_from, smtp_use_tls, smtp_use_ssl)
             else:
-                # 配置不完整，使用API方式发送
-                logger.info(f"SMTP配置不完整，使用API方式发送验证码邮件: {email}")
-                return await self._send_email_via_api(email, subject, text_content)
+                # 配置不完整且外部邮件 API 已禁用，直接返回失败
+                logger.info(f"SMTP配置不完整，已禁用外部API发送: {email}")
+                return False
 
         except Exception as e:
             logger.error(f"发送验证码邮件异常: {e}")
@@ -2792,8 +2814,24 @@ class DBManager:
 
     async def _send_email_via_smtp(self, email: str, subject: str, text_content: str,
                                  smtp_server: str, smtp_port: int, smtp_user: str,
-                                 smtp_password: str, smtp_from: str, smtp_use_tls: bool, smtp_use_ssl: bool) -> bool:
-        """使用SMTP方式发送邮件"""
+                                 smtp_password: str, smtp_from: str, smtp_use_tls: bool,
+                                 smtp_use_ssl: bool) -> bool:
+        """用途：使用 SMTP 方式发送验证码邮件
+
+        入参：
+            email: 收件邮箱地址
+            subject: 邮件主题
+            text_content: 邮件纯文本内容
+            smtp_server: SMTP 服务器地址
+            smtp_port: SMTP 端口号
+            smtp_user: SMTP 登录用户名
+            smtp_password: SMTP 登录密码或授权码
+            smtp_from: 发件人显示名
+            smtp_use_tls: 是否启用 TLS
+            smtp_use_ssl: 是否启用 SSL
+        返回值：bool，发送成功返回 True，否则 False
+        业务约束：SMTP 失败不再回退外部邮件 API，避免信息外发
+        """
         try:
             import smtplib
             from email.mime.text import MIMEText
@@ -2824,42 +2862,21 @@ class DBManager:
             return True
         except Exception as e:
             logger.error(f"SMTP发送验证码邮件失败: {e}")
-            # SMTP发送失败，尝试使用API方式
-            logger.info(f"SMTP发送失败，尝试使用API方式发送: {email}")
-            return await self._send_email_via_api(email, subject, text_content)
+            # 外部邮件 API 已禁用，SMTP 失败直接返回
+            return False
 
     async def _send_email_via_api(self, email: str, subject: str, text_content: str) -> bool:
-        """使用API方式发送邮件"""
-        try:
-            import aiohttp
+        """用途：使用 API 方式发送邮件（已禁用）
 
-            # 使用GET请求发送邮件
-            api_url = "https://dy.zhinianboke.com/api/emailSend"
-            params = {
-                'subject': subject,
-                'receiveUser': email,
-                'sendHtml': text_content
-            }
-
-            async with aiohttp.ClientSession() as session:
-                try:
-                    logger.info(f"使用API发送验证码邮件: {email}")
-                    async with session.get(api_url, params=params, timeout=15) as response:
-                        response_text = await response.text()
-                        logger.info(f"邮件API响应: {response.status}")
-
-                        if response.status == 200:
-                            logger.info(f"验证码邮件发送成功(API): {email}")
-                            return True
-                        else:
-                            logger.error(f"API发送验证码邮件失败: {email}, 状态码: {response.status}, 响应: {response_text[:200]}")
-                            return False
-                except Exception as e:
-                    logger.error(f"API邮件发送异常: {email}, 错误: {e}")
-                    return False
-        except Exception as e:
-            logger.error(f"API邮件发送方法异常: {e}")
-            return False
+        入参：
+            email: 收件邮箱地址
+            subject: 邮件主题
+            text_content: 邮件纯文本内容
+        返回值：bool，始终返回 False
+        业务约束：外部邮件 API 已禁用，禁止外联发送验证码
+        """
+        logger.warning(f"邮件 API 外联已禁用，跳过发送: {email}")
+        return False
 
     # ==================== 卡券管理方法 ====================
 

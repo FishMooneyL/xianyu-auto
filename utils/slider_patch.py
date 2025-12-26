@@ -9,27 +9,20 @@ import time
 import random
 
 
-def send_notification(user_id: str, title: str, message: str, notification_type: str = "info"):
-    """
-    发送通知的公共方法（支持多种通知渠道）
-    
-    支持的通知渠道：
-        - Bark: iOS推送通知
-        - 钉钉 (DingTalk): 企业办公通知
-        - 飞书 (Feishu/Lark): 企业协作通知
-        - Telegram: 即时通讯通知
-        - Email: 邮件通知
-        - Webhook: 自定义HTTP回调
-    
-    Args:
-        user_id: 用户ID/账号ID
+def send_notification(user_id: str, title: str, message: str,
+                      notification_type: str = "info"):
+    """用途：发送通知公共方法（已禁用外部通知）
+
+    入参：
+        user_id: 用户 ID/账号 ID
         title: 通知标题
         message: 通知内容
-        notification_type: 通知类型 (info/warning/error/success)
-    
-    Returns:
-        bool: 是否成功发送至少一个通知
+        notification_type: 通知类型（info/warning/error/success）
+    返回值：bool，禁用状态下始终返回 False
+    业务约束：外部通知已禁用，避免验证信息外发
     """
+    logger.warning(f"通知已禁用，跳过发送: user_id={user_id}")
+    return False
     try:
         logger.info(f"【{user_id}】准备发送通知: {title}")
         
@@ -2200,4 +2193,3 @@ if __name__ != "__main__":
         apply_patches()
     except:
         pass  # 如果导入失败，忽略错误
-

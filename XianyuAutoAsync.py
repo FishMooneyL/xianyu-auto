@@ -3417,8 +3417,22 @@ class XianyuLive:
         except:
             return 0.0
 
-    async def send_notification(self, send_user_name: str, send_user_id: str, send_message: str, item_id: str = None, chat_id: str = None):
-        """发送消息通知"""
+    async def send_notification(self, send_user_name: str, send_user_id: str,
+                                send_message: str, item_id: str = None,
+                                chat_id: str = None):
+        """用途：发送消息通知（已禁用外部通知）
+
+        入参：
+            send_user_name: 发送方昵称
+            send_user_id: 发送方用户 ID
+            send_message: 消息内容
+            item_id: 商品 ID（可为空）
+            chat_id: 会话 ID（可为空）
+        返回值：None，禁用状态下直接返回
+        业务约束：外部通知已禁用，避免消息内容外发
+        """
+        logger.warning(f"通知已禁用，跳过发送: cookie_id={self.cookie_id}")
+        return
         try:
             from db_manager import db_manager
             import aiohttp
@@ -3990,15 +4004,24 @@ class XianyuLive:
         except Exception as e:
             logger.error(f"发送Telegram通知异常: {self._safe_str(e)}")
 
-    async def send_token_refresh_notification(self, error_message: str, notification_type: str = "token_refresh", chat_id: str = None, attachment_path: str = None, verification_url: str = None):
-        """发送Token刷新异常通知（带防重复机制，支持附件）
-        
-        Args:
-            error_message: 错误消息
-            notification_type: 通知类型
-            chat_id: 聊天ID（可选）
-            attachment_path: 附件路径（可选，用于发送截图）
+    async def send_token_refresh_notification(self, error_message: str,
+                                              notification_type: str = "token_refresh",
+                                              chat_id: str = None,
+                                              attachment_path: str = None,
+                                              verification_url: str = None):
+        """用途：发送 Token 刷新异常通知（已禁用外部通知）
+
+        入参：
+            error_message: 错误消息内容
+            notification_type: 通知类型标识
+            chat_id: 聊天 ID（可选）
+            attachment_path: 附件路径（可选）
+            verification_url: 验证链接（可选）
+        返回值：None，禁用状态下直接返回
+        业务约束：外部通知已禁用，避免异常信息外发
         """
+        logger.warning(f"通知已禁用，跳过发送: type={notification_type}")
+        return
         try:
             # 检查是否是正常的令牌过期，这种情况不需要发送通知
             if self._is_normal_token_expiry(error_message):
@@ -4196,8 +4219,23 @@ class XianyuLive:
 
         return False
 
-    async def send_delivery_failure_notification(self, send_user_name: str, send_user_id: str, item_id: str, error_message: str, chat_id: str = None):
-        """发送自动发货失败通知"""
+    async def send_delivery_failure_notification(self, send_user_name: str,
+                                                 send_user_id: str, item_id: str,
+                                                 error_message: str,
+                                                 chat_id: str = None):
+        """用途：发送自动发货失败通知（已禁用外部通知）
+
+        入参：
+            send_user_name: 发送方昵称
+            send_user_id: 发送方用户 ID
+            item_id: 商品 ID
+            error_message: 失败原因描述
+            chat_id: 聊天 ID（可选）
+        返回值：None，禁用状态下直接返回
+        业务约束：外部通知已禁用，避免订单与聊天信息外发
+        """
+        logger.warning(f"通知已禁用，跳过发货失败通知: cookie_id={self.cookie_id}")
+        return
         try:
             from db_manager import db_manager
 

@@ -8,20 +8,6 @@ interface UpdateInfo {
   download_url?: string
 }
 
-// 版本比较函数
-function compareVersions(v1: string, v2: string): number {
-  const normalize = (v: string) => v.replace(/^v/, '').split('.').map(Number)
-  const parts1 = normalize(v1)
-  const parts2 = normalize(v2)
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const p1 = parts1[i] || 0
-    const p2 = parts2[i] || 0
-    if (p1 > p2) return 1
-    if (p1 < p2) return -1
-  }
-  return 0
-}
-
 export function About() {
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [version, setVersion] = useState('加载中...')
@@ -37,80 +23,38 @@ export function About() {
   const [changelog, setChangelog] = useState<UpdateInfo[]>([])
   const [changelogHtml, setChangelogHtml] = useState<string | null>(null)
   const [loadingChangelog, setLoadingChangelog] = useState(false)
+  // 禁止使用 HTML 渲染，保留变量仅用于状态占位
+  void changelogHtml
 
-  // 检查更新
+  /**
+   * 用途：检查更新（已禁用外部版本拉取）
+   * 入参：showToast 是否触发提示（禁用状态下不触发）
+   * 返回值：Promise<void>
+   * 业务约束：禁止外联版本接口，避免内容注入风险
+   */
   const checkForUpdate = useCallback(async (showToast = false) => {
     setCheckingUpdate(true)
-    try {
-      const response = await fetch('/api/version/check')
-      const result = await response.json()
+    // 保留参数占位，避免调用方改动
+    void showToast
+    setHasUpdate(false)
+    setLatestVersion(null)
+    setUpdateInfo(null)
+    setCheckingUpdate(false)
+    return
+  }, [])
 
-      if (result.error) {
-        if (showToast) {
-          console.error('获取版本信息失败:', result.message)
-        }
-        return
-      }
-
-      // 支持 {data: "v1.0.5"} 格式
-      const remoteVersion = result.data || result.version || result.latest_version
-      if (remoteVersion) {
-        setLatestVersion(remoteVersion)
-        setUpdateInfo({
-          version: remoteVersion,
-          date: result.date || result.release_date,
-          changes: result.changes || result.changelog || [],
-          download_url: result.download_url,
-        })
-
-        if (compareVersions(remoteVersion, version) > 0) {
-          setHasUpdate(true)
-          if (showToast) {
-            setShowUpdateModal(true)
-          }
-        } else if (showToast) {
-          // 已是最新版本的提示
-          setHasUpdate(false)
-        }
-      }
-    } catch (error) {
-      console.error('检查更新失败:', error)
-    } finally {
-      setCheckingUpdate(false)
-    }
-  }, [version])
-
-  // 获取更新日志
+  /**
+   * 用途：获取更新日志（已禁用外部日志拉取）
+   * 入参：无
+   * 返回值：Promise<void>
+   * 业务约束：禁止外联日志接口，避免内容注入风险
+   */
   const loadChangelog = useCallback(async () => {
     setLoadingChangelog(true)
     setChangelogHtml(null)
     setChangelog([])
-    try {
-      const response = await fetch('/api/version/changelog')
-      const result = await response.json()
-
-      if (result.error) {
-        console.error('获取更新日志失败:', result.message)
-        return
-      }
-
-      // 支持 {data: {updates: [...]}} 格式
-      if (result.data && result.data.updates && Array.isArray(result.data.updates)) {
-        // 将 updates 数组合并成 HTML 字符串
-        const htmlContent = result.data.updates.join('<br/>')
-        setChangelogHtml(htmlContent)
-      } else if (result.html) {
-        setChangelogHtml(result.html)
-      } else if (result.changelog) {
-        setChangelog(result.changelog)
-      } else if (Array.isArray(result)) {
-        setChangelog(result)
-      }
-    } catch (error) {
-      console.error('获取更新日志失败:', error)
-    } finally {
-      setLoadingChangelog(false)
-    }
+    setLoadingChangelog(false)
+    return
   }, [])
 
   useEffect(() => {
@@ -475,11 +419,6 @@ export function About() {
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
                 </div>
-              ) : changelogHtml ? (
-                <div 
-                  className="changelog-html prose prose-sm dark:prose-invert max-w-none"
-                  dangerouslySetInnerHTML={{ __html: changelogHtml }}
-                />
               ) : changelog.length === 0 ? (
                 <div className="text-center py-12 text-slate-500 dark:text-slate-400">
                   <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />

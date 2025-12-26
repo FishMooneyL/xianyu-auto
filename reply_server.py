@@ -41,7 +41,8 @@ KEYWORDS_FILE = Path(__file__).parent / "回复关键字.txt"
 
 # 简单的用户认证配置
 ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "admin123"  # 系统初始化时的默认密码
+# 默认管理员密码用途：仅用于默认管理员初始化/校验；来源环境变量，空字符串表示禁用默认口令校验
+DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 SESSION_TOKENS = {}  # 存储会话token: {token: {'user_id': int, 'username': str, 'timestamp': float}}
 TOKEN_EXPIRE_TIME = 24 * 60 * 60  # token过期时间：24小时
 
@@ -419,44 +420,27 @@ async def health_check():
 
 
 # ==================== 版本检查和更新日志接口 ====================
-import httpx
 
 @app.get('/api/version/check')
 async def check_version():
-    """检查最新版本（代理外部接口）"""
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get('https://xianyu.zhinianblog.cn/index.php?action=getVersion')
-            if response.status_code == 200:
-                try:
-                    return response.json()
-                except Exception:
-                    # 如果不是有效JSON，返回HTML内容
-                    return {"html": response.text}
-            else:
-                return {"error": True, "message": f"远程服务返回状态码: {response.status_code}"}
-    except Exception as e:
-        logger.error(f"检查版本失败: {e}")
-        return {"error": True, "message": f"检查版本失败: {str(e)}"}
+    """用途：检查最新版本（已禁用外部版本查询）
+
+    入参：无
+    返回值：dict，固定返回禁用提示
+    业务约束：禁止访问远端版本接口，避免外联与内容注入风险
+    """
+    return {"error": True, "message": "版本检查已禁用"}
 
 
 @app.get('/api/version/changelog')
 async def get_changelog():
-    """获取更新日志（代理外部接口）"""
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get('https://xianyu.zhinianblog.cn/index.php?action=getUpdateInfo')
-            if response.status_code == 200:
-                try:
-                    return response.json()
-                except Exception:
-                    # 如果不是有效JSON，返回HTML内容
-                    return {"html": response.text}
-            else:
-                return {"error": True, "message": f"远程服务返回状态码: {response.status_code}"}
-    except Exception as e:
-        logger.error(f"获取更新日志失败: {e}")
-        return {"error": True, "message": f"获取更新日志失败: {str(e)}"}
+    """用途：获取更新日志（已禁用外部日志拉取）
+
+    入参：无
+    返回值：dict，固定返回禁用提示
+    业务约束：禁止访问远端更新日志接口，避免外联与内容注入风险
+    """
+    return {"error": True, "message": "更新日志已禁用"}
 
 
 # 服务 React 前端 SPA - 所有前端路由都返回 index.html
@@ -730,28 +714,14 @@ async def change_user_password(request: ChangePasswordRequest, current_user: Dic
 # 检查是否使用默认密码
 @app.get('/api/check-default-password')
 async def check_default_password(current_user: Dict[str, Any] = Depends(get_current_user)):
-    from db_manager import db_manager
+    """用途：检查默认密码使用情况（已禁用默认口令检测）
 
-    try:
-        username = current_user.get('username')
-        is_admin = current_user.get('is_admin', False)
-        
-        logger.info(f"检查默认密码: username={username}, is_admin={is_admin}")
-        
-        # 只检查admin用户
-        if not is_admin or username != 'admin':
-            logger.info(f"非admin用户，跳过检查")
-            return {"using_default": False}
-
-        # 检查是否使用默认密码
-        using_default = db_manager.verify_user_password('admin', DEFAULT_ADMIN_PASSWORD)
-        logger.info(f"默认密码检查结果: {using_default}, DEFAULT_ADMIN_PASSWORD={DEFAULT_ADMIN_PASSWORD}")
-        
-        return {"using_default": using_default}
-
-    except Exception as e:
-        logger.error(f"检查默认密码异常: {e}")
-        return {"using_default": False}
+    入参：
+        current_user: 当前登录用户信息，用于鉴权与追踪
+    返回值：dict，固定返回 using_default=False
+    业务约束：禁止依赖硬编码默认口令，接口始终返回未使用默认口令
+    """
+    return {"using_default": False}
 
 
 # 生成图形验证码接口
@@ -878,121 +848,33 @@ class GeetestValidateResponse(BaseModel):
 
 @app.get('/geetest/register', response_model=GeetestRegisterResponse)
 async def geetest_register():
+    """用途：获取极验验证码初始化参数（已禁用）
+
+    入参：无
+    返回值：GeetestRegisterResponse，固定返回禁用提示
+    业务约束：禁止访问第三方验证码服务，避免信息外发与外联依赖
     """
-    获取极验验证码初始化参数
-    
-    前端调用此接口获取gt、challenge等参数，用于初始化验证码组件
-    """
-    try:
-        from utils.geetest import GeetestLib
-        
-        gt_lib = GeetestLib()
-        result = await gt_lib.register()
-        
-        data = result.to_dict()
-        logger.info(f"极验初始化结果: status={result.status}, data={data}")
-        
-        # 记录初始状态
-        challenge = data.get("challenge", "")
-        if challenge:
-            set_geetest_status(challenge, 0)
-        
-        return GeetestRegisterResponse(
-            success=True,
-            code=200,
-            message="获取成功" if result.status == 1 else "宕机模式",
-            data=data
-        )
-            
-    except Exception as e:
-        logger.error(f"极验初始化失败: {e}")
-        # 返回本地初始化结果
-        try:
-            from utils.geetest import GeetestLib
-            gt_lib = GeetestLib()
-            result = gt_lib.local_init()
-            data = result.to_dict()
-            
-            # 记录初始状态
-            challenge = data.get("challenge", "")
-            if challenge:
-                set_geetest_status(challenge, 0)
-            
-            return GeetestRegisterResponse(
-                success=True,
-                code=200,
-                message="本地初始化",
-                data=data
-            )
-        except Exception as e2:
-            logger.error(f"极验本地初始化也失败: {e2}")
-            return GeetestRegisterResponse(
-                success=False,
-                code=500,
-                message="验证码服务异常"
-            )
+    return GeetestRegisterResponse(
+        success=False,
+        code=403,
+        message="极验验证已禁用"
+    )
 
 
 @app.post('/geetest/validate', response_model=GeetestValidateResponse)
 async def geetest_validate(request: GeetestValidateRequest):
+    """用途：极验二次验证（已禁用）
+
+    入参：
+        request: 极验验证参数（禁用状态下不处理）
+    返回值：GeetestValidateResponse，固定返回禁用提示
+    业务约束：禁止访问第三方验证码服务，避免信息外发与外联依赖
     """
-    极验二次验证
-    
-    用户完成滑动验证后，前端调用此接口进行二次验证
-    """
-    try:
-        # 检查是否已经验证过
-        if get_geetest_status(request.challenge) == 1:
-            return GeetestValidateResponse(
-                success=True,
-                code=200,
-                message="验证通过"
-            )
-        
-        from utils.geetest import GeetestLib
-        
-        gt_lib = GeetestLib()
-        
-        # 判断是正常模式还是宕机模式
-        # 通过challenge长度判断：正常模式challenge是32位MD5，宕机模式是UUID
-        is_normal_mode = len(request.challenge) == 32
-        
-        if is_normal_mode:
-            result = await gt_lib.success_validate(
-                request.challenge,
-                request.validate,
-                request.seccode
-            )
-        else:
-            result = gt_lib.fail_validate(
-                request.challenge,
-                request.validate,
-                request.seccode
-            )
-        
-        if result.status == 1:
-            # 记录验证通过状态
-            set_geetest_status(request.challenge, 1)
-            
-            return GeetestValidateResponse(
-                success=True,
-                code=200,
-                message="验证通过"
-            )
-        else:
-            return GeetestValidateResponse(
-                success=False,
-                code=400,
-                message=result.msg or "验证失败"
-            )
-            
-    except Exception as e:
-        logger.error(f"极验二次验证失败: {e}")
-        return GeetestValidateResponse(
-            success=False,
-            code=500,
-            message="验证服务异常"
-        )
+    return GeetestValidateResponse(
+        success=False,
+        code=403,
+        message="极验验证已禁用"
+    )
 
 
 # 发送验证码接口（需要先验证图形验证码）
@@ -1130,9 +1012,8 @@ async def register(request: RegisterRequest):
 
 # ------------------------- 发送消息接口 -------------------------
 
-# 固定的API秘钥（生产环境中应该从配置文件或环境变量读取）
-# 注意：现在从系统设置中读取QQ回复消息秘钥
-API_SECRET_KEY = "xianyu_api_secret_2024"  # 保留作为后备
+# 消息API秘钥用途：用于外部调用 send-message 鉴权；来源环境变量，未配置视为禁用
+API_SECRET_KEY = os.getenv("API_SECRET_KEY", "")
 
 class SendMessageRequest(BaseModel):
     api_key: str
@@ -1148,26 +1029,38 @@ class SendMessageResponse(BaseModel):
 
 
 def verify_api_key(api_key: str) -> bool:
-    """验证API秘钥"""
+    """用途：验证 send-message API 秘钥
+
+    入参：
+        api_key: 调用方传入的秘钥字符串
+    返回值：bool，验证通过返回 True
+    业务约束：必须配置系统设置或环境变量秘钥，否则视为禁用
+    """
     try:
         # 从系统设置中获取QQ回复消息秘钥
         from db_manager import db_manager
-        qq_secret_key = db_manager.get_system_setting('qq_reply_secret_key')
-
-        # 如果系统设置中没有配置，使用默认值
-        if not qq_secret_key:
-            qq_secret_key = API_SECRET_KEY
-
-        return api_key == qq_secret_key
+        qq_secret_key = db_manager.get_system_setting('qq_reply_secret_key') or ""
+        secret_key = qq_secret_key or API_SECRET_KEY
+        if not secret_key:
+            logger.warning("未配置消息API秘钥，已禁用外部调用")
+            return False
+        return api_key == secret_key
     except Exception as e:
         logger.error(f"验证API秘钥时发生异常: {e}")
-        # 异常情况下使用默认秘钥验证
+        if not API_SECRET_KEY:
+            logger.warning("环境变量 API_SECRET_KEY 未配置，已禁用外部调用")
+            return False
         return api_key == API_SECRET_KEY
 
 
 @app.post('/send-message', response_model=SendMessageResponse)
 async def send_message_api(request: SendMessageRequest):
-    """发送消息API接口（使用秘钥验证）"""
+    """用途：发送消息 API 接口（使用秘钥验证）
+
+    入参：request，包含 api_key/cookie_id/chat_id/to_user_id/message
+    返回值：SendMessageResponse，包含 success 与 message
+    业务约束：未配置秘钥或校验失败时直接拒绝
+    """
     try:
         # 清理所有参数中的换行符
         def clean_param(param_str):
@@ -1189,14 +1082,6 @@ async def send_message_api(request: SendMessageRequest):
             return SendMessageResponse(
                 success=False,
                 message="API秘钥不能为空"
-            )
-
-        # 特殊测试秘钥处理
-        if cleaned_api_key == "zhinina_test_key":
-            logger.info("使用测试秘钥，直接返回成功")
-            return SendMessageResponse(
-                success=True,
-                message="接口验证成功"
             )
 
         # 验证API秘钥
@@ -5500,7 +5385,14 @@ def get_item_reply(cookie_id: str, item_id: str, current_user: Dict[str, Any] = 
 
 @app.get('/admin/backup/download')
 def download_database_backup(admin_user: Dict[str, Any] = Depends(require_admin)):
-    """下载数据库备份文件（管理员专用）"""
+    """用途：下载数据库备份文件（已禁用）
+
+    入参：admin_user 管理员信息（仅用于鉴权）
+    返回值：无，直接抛出禁止访问
+    业务约束：备份下载已禁用，避免敏感数据外泄
+    """
+    log_with_user('warning', "数据库备份下载已禁用", admin_user)
+    raise HTTPException(status_code=403, detail="数据库备份下载已禁用")
     import os
     from fastapi.responses import FileResponse
     from datetime import datetime
@@ -5538,7 +5430,14 @@ def download_database_backup(admin_user: Dict[str, Any] = Depends(require_admin)
 @app.post('/admin/backup/upload')
 async def upload_database_backup(admin_user: Dict[str, Any] = Depends(require_admin),
                                 backup_file: UploadFile = File(...)):
-    """上传并恢复数据库备份文件（管理员专用）"""
+    """用途：上传并恢复数据库备份文件（已禁用）
+
+    入参：admin_user 管理员信息；backup_file 备份文件
+    返回值：无，直接抛出禁止访问
+    业务约束：备份上传已禁用，避免敏感数据被覆盖或注入
+    """
+    log_with_user('warning', "数据库备份上传已禁用", admin_user)
+    raise HTTPException(status_code=403, detail="数据库备份上传已禁用")
     import os
     import shutil
     import sqlite3

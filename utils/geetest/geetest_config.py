@@ -11,20 +11,20 @@ import os
 class GeetestConfig:
     """极验验证码配置类"""
     
-    # 极验分配的captcha_id（从环境变量读取，有默认值）
-    CAPTCHA_ID = os.getenv("GEETEST_CAPTCHA_ID", "a30cdbb466e9349385762477cb2c7df6")
+    # 极验分配的 captcha_id（必须通过环境变量显式提供，未配置视为禁用）
+    CAPTCHA_ID = os.getenv("GEETEST_CAPTCHA_ID", "")
     
-    # 极验分配的私钥（从环境变量读取，有默认值）
-    PRIVATE_KEY = os.getenv("GEETEST_PRIVATE_KEY", "6f70322308eb29ae0d85516a14a32d2c")
+    # 极验分配的私钥（必须通过环境变量显式提供，未配置视为禁用）
+    PRIVATE_KEY = os.getenv("GEETEST_PRIVATE_KEY", "")
     
-    # 用户标识（可选）
+    # 用户标识（可选，未配置则使用默认标识）
     USER_ID = os.getenv("GEETEST_USER_ID", "xianyu_system")
     
     # 客户端类型：web, h5, native, unknown
     CLIENT_TYPE = "web"
     
-    # API地址
-    API_URL = "http://api.geetest.com"
+    # API地址（使用 HTTPS，避免明文传输）
+    API_URL = "https://api.geetest.com"
     REGISTER_URL = "/register.php"
     VALIDATE_URL = "/validate.php"
     

@@ -292,7 +292,22 @@ class AIReplyEngine:
     def generate_reply(self, message: str, item_info: dict, chat_id: str,
                       cookie_id: str, user_id: str, item_id: str,
                       skip_wait: bool = False) -> Optional[str]:
-        """生成AI回复"""
+        """用途：生成 AI 回复（已禁用外部模型调用）
+
+        入参：
+            message: 用户消息内容
+            item_info: 商品信息字典，包含标题/详情等上下文
+            chat_id: 会话唯一标识
+            cookie_id: 账号 ID，用于上下文隔离
+            user_id: 用户 ID
+            item_id: 商品 ID
+            skip_wait: 是否跳过内部等待（调用方已做防抖）
+        返回值：Optional[str]，禁用状态下始终返回 None
+        业务约束：外部 AI 调用已禁用，避免消息内容外发
+        """
+        # 外部 AI 调用已禁用，直接返回空结果
+        logger.warning(f"AI回复已禁用，跳过生成: cookie_id={cookie_id}")
+        return None
         if not self.is_ai_enabled(cookie_id):
             return None
         
@@ -431,16 +446,21 @@ class AIReplyEngine:
     async def generate_reply_async(self, message: str, item_info: dict, chat_id: str,
                                    cookie_id: str, user_id: str, item_id: str,
                                    skip_wait: bool = False) -> Optional[str]:
+        """用途：生成 AI 回复（异步，已禁用外部模型调用）
+
+        入参：
+            message: 用户消息内容
+            item_info: 商品信息字典，包含标题/详情等上下文
+            chat_id: 会话唯一标识
+            cookie_id: 账号 ID，用于上下文隔离
+            user_id: 用户 ID
+            item_id: 商品 ID
+            skip_wait: 是否跳过内部等待（调用方已做防抖）
+        返回值：Optional[str]，禁用状态下始终返回 None
+        业务约束：外部 AI 调用已禁用，避免消息内容外发
         """
-        异步包装器：在独立线程池中执行同步的 `generate_reply`，并返回结果。
-        这样可以在异步代码中直接 await，而不阻塞事件循环。
-        """
-        try:
-            import asyncio as _asyncio
-            return await _asyncio.to_thread(self.generate_reply, message, item_info, chat_id, cookie_id, user_id, item_id, skip_wait)
-        except Exception as e:
-            logger.error(f"异步生成回复失败: {e}")
-            return None
+        logger.warning(f"AI回复已禁用（异步），跳过生成: cookie_id={cookie_id}")
+        return None
     
     def get_conversation_context(self, chat_id: str, cookie_id: str, limit: int = 20) -> List[Dict]:
         """获取对话上下文"""

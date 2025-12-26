@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { MessageSquare, User, Lock, Mail, KeyRound, Eye, EyeOff, Sun, Moon } from 'lucide-react'
-import { login, verifyToken, getRegistrationStatus, getLoginInfoStatus, generateCaptcha, verifyCaptcha, sendVerificationCode, getLoginCaptchaStatus } from '@/api/auth'
+import { login, verifyToken, getRegistrationStatus, generateCaptcha, verifyCaptcha, sendVerificationCode } from '@/api/auth'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { cn } from '@/utils/cn'
@@ -20,9 +20,9 @@ export function Login() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [registrationEnabled, setRegistrationEnabled] = useState(true)
-  const [showDefaultLogin, setShowDefaultLogin] = useState(true)
   const [isDark, setIsDark] = useState(false)
-  const [loginCaptchaEnabled, setLoginCaptchaEnabled] = useState(true)
+  // 登录滑动验证码开关：默认关闭，避免加载第三方极验并触发外联请求
+  const [loginCaptchaEnabled, setLoginCaptchaEnabled] = useState(false)
 
   // Form states
   const [username, setUsername] = useState('')
@@ -82,13 +82,9 @@ export function Login() {
 
   useEffect(() => {
     getRegistrationStatus().then((result) => setRegistrationEnabled(result.enabled)).catch(() => {})
-    getLoginInfoStatus().then((result) => setShowDefaultLogin(result.enabled)).catch(() => {})
-    getLoginCaptchaStatus().then((result) => {
-      console.log('getLoginCaptchaStatus result:', result)
-      setLoginCaptchaEnabled(result.enabled)
-    }).catch((err) => {
-      console.error('getLoginCaptchaStatus error:', err)
-    })
+    // 已禁用默认账号提示，避免展示默认口令
+    // 已禁用登录滑动验证码，避免加载第三方极验服务
+    setLoginCaptchaEnabled(false)
   }, [])
 
   useEffect(() => {
@@ -194,8 +190,6 @@ export function Login() {
     }
   }
 
-  const fillDefaultCredentials = () => { setLoginType('username'); setUsername('admin'); setPassword('admin123') }
-
   return (
     <div className="min-h-screen flex bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
       <button onClick={toggleTheme} className="fixed top-4 right-4 z-50 p-2.5 rounded-lg bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors duration-150" title={isDark ? '切换到亮色模式' : '切换到暗色模式'}>
@@ -249,7 +243,6 @@ export function Login() {
               <button type="submit" disabled={loading} className="w-full btn-ios-primary">{loading ? <ButtonLoading /> : '登 录'}</button>
             </form>
             {registrationEnabled && (<p className="text-center mt-6 text-slate-500 dark:text-slate-400 text-sm">还没有账号？{' '}<Link to="/register" className="text-blue-600 dark:text-blue-400 font-medium hover:text-blue-700 dark:hover:text-blue-300">立即注册</Link></p>)}
-            {showDefaultLogin && (<div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-700"><button type="button" onClick={fillDefaultCredentials} className="w-full flex items-center justify-between p-3 rounded-md bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-sm"><div className="text-left"><p className="text-slate-500 dark:text-slate-400">演示账号</p><p className="text-slate-900 dark:text-white font-medium">admin / admin123</p></div><span className="text-blue-600 dark:text-blue-400">一键填充 →</span></button></div>)}
           </div>
           <p className="text-center mt-6 text-slate-400 dark:text-slate-500 text-xs">© {new Date().getFullYear()} 划算云服务器 · <a href="https://www.hsykj.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600 dark:hover:text-blue-400 ml-1 transition-colors">www.hsykj.com</a></p>
         </motion.div>
