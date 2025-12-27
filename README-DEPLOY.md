@@ -10,6 +10,38 @@
 - 服务端口：`<端口>`（默认示例为 `10293`）
 - 管理员密码：`<管理员密码>`
 
+## 1.1 一键脚本（推荐）
+
+项目根目录提供了 `deploy-server.sh`，适合日常快速更新。
+
+```bash
+# 进入项目根目录
+cd /path/to/xianyu-auto-reply
+
+# 配置环境变量
+export SERVER_HOST=<服务器IP>
+export SSH_KEY_PATH=<私钥路径>
+export APP_PORT=10293
+export ADMIN_PASSWORD=<管理员密码>
+
+# 执行更新
+bash deploy-server.sh
+```
+
+脚本默认会：
+1. rsync 同步代码（不会覆盖 data/logs 等持久化目录）
+2. 远端构建镜像（默认 Dockerfile-cn）
+3. 重建容器并做健康检查
+
+如需自定义，可通过环境变量覆盖：
+- `SSH_USER`：SSH 用户名，默认 `root`
+- `SSH_PORT`：SSH 端口，默认 `22`
+- `REMOTE_DIR`：服务器目录，默认 `/root/xianyu-auto-reply`
+- `DOCKERFILE`：默认 `Dockerfile-cn`
+- `IMAGE_TAG`：默认 `xianyu-auto-reply:local`
+- `CONTAINER_NAME`：默认 `xianyu-auto-reply`
+- `FORCE_BIND_ALL`：默认 `true`（自动把 `host` 改成 `0.0.0.0`）
+
 ## 2. 同步代码到服务器
 
 默认不覆盖 `data/`（数据库）与 `logs/`（日志），避免误覆盖线上数据。
@@ -96,4 +128,3 @@ http://<服务器IP>:<端口>/
 - **容器健康检查显示异常**：Dockerfile 的健康检查默认指向 `8080`，但你可能运行在 `10293`。这不影响实际服务，可忽略或自行调整健康检查。
 - **无法公网访问**：检查安全组/防火墙是否放行端口；并确认 `global_config.yml` 中 `AUTO_REPLY.api.host` 为 `0.0.0.0`。
 - **构建依赖下载慢**：优先使用 `Dockerfile-cn`，并确保服务器可访问国内镜像源与 Playwright 镜像站。
-
