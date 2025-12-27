@@ -412,9 +412,15 @@ def _check_and_install_playwright():
     
     return playwright_installed
 
-# 检查并安装Playwright浏览器
+# 是否跳过 Playwright 浏览器安装（用途：本地快速启动；值来自环境变量）
+_skip_playwright_install = os.getenv('SKIP_PLAYWRIGHT_INSTALL', 'false').lower() == 'true'
+
+# 检查并安装 Playwright 浏览器
 try:
-    _check_and_install_playwright()
+    if _skip_playwright_install:
+        print(f"{_WARN} 已跳过Playwright浏览器安装，部分功能可能不可用")
+    else:
+        _check_and_install_playwright()
 except Exception as e:
     print(f"{_WARN} Playwright浏览器检查失败: {e}")
     print("   程序将继续启动，但Playwright功能可能不可用")

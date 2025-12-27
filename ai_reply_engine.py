@@ -10,6 +10,7 @@ AI回复引擎模块
 """
 
 import os
+import asyncio
 import json
 import time
 import sqlite3
@@ -292,7 +293,7 @@ class AIReplyEngine:
     def generate_reply(self, message: str, item_info: dict, chat_id: str,
                       cookie_id: str, user_id: str, item_id: str,
                       skip_wait: bool = False) -> Optional[str]:
-        """用途：生成 AI 回复（已禁用外部模型调用）
+        """用途：生成 AI 回复
 
         入参：
             message: 用户消息内容
@@ -302,12 +303,9 @@ class AIReplyEngine:
             user_id: 用户 ID
             item_id: 商品 ID
             skip_wait: 是否跳过内部等待（调用方已做防抖）
-        返回值：Optional[str]，禁用状态下始终返回 None
-        业务约束：外部 AI 调用已禁用，避免消息内容外发
+        返回值：Optional[str]，成功返回回复文本，失败或未启用时返回 None
+        业务约束：账号未启用或配置不完整时不发起外部模型请求
         """
-        # 外部 AI 调用已禁用，直接返回空结果
-        logger.warning(f"AI回复已禁用，跳过生成: cookie_id={cookie_id}")
-        return None
         if not self.is_ai_enabled(cookie_id):
             return None
         
@@ -446,7 +444,7 @@ class AIReplyEngine:
     async def generate_reply_async(self, message: str, item_info: dict, chat_id: str,
                                    cookie_id: str, user_id: str, item_id: str,
                                    skip_wait: bool = False) -> Optional[str]:
-        """用途：生成 AI 回复（异步，已禁用外部模型调用）
+        """用途：异步生成 AI 回复
 
         入参：
             message: 用户消息内容
@@ -456,11 +454,19 @@ class AIReplyEngine:
             user_id: 用户 ID
             item_id: 商品 ID
             skip_wait: 是否跳过内部等待（调用方已做防抖）
-        返回值：Optional[str]，禁用状态下始终返回 None
-        业务约束：外部 AI 调用已禁用，避免消息内容外发
+        返回值：Optional[str]，成功返回回复文本，失败或未启用时返回 None
+        业务约束：仅做线程封装以避免阻塞事件循环，核心逻辑复用同步实现
         """
-        logger.warning(f"AI回复已禁用（异步），跳过生成: cookie_id={cookie_id}")
-        return None
+        return await asyncio.to_thread(
+            self.generate_reply,
+            message,
+            item_info,
+            chat_id,
+            cookie_id,
+            user_id,
+            item_id,
+            skip_wait
+        )
     
     def get_conversation_context(self, chat_id: str, cookie_id: str, limit: int = 20) -> List[Dict]:
         """获取对话上下文"""

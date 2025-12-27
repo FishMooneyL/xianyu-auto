@@ -4501,7 +4501,14 @@ def get_ai_reply_settings(cookie_id: str, current_user: Dict[str, Any] = Depends
 
 @app.put("/ai-reply-settings/{cookie_id}")
 def update_ai_reply_settings(cookie_id: str, settings: AIReplySettings, current_user: Dict[str, Any] = Depends(get_current_user)):
-    """更新指定账号的AI回复设置"""
+    """用途：更新指定账号的AI回复设置
+
+    入参：
+        cookie_id: 账号 ID
+        settings: AI 回复设置请求体
+    返回值：包含更新结果的字典
+    业务约束：仅更新调用方显式传入字段，避免覆盖系统级默认配置
+    """
     try:
         # 检查cookie是否属于当前用户
         user_id = current_user['user_id']
@@ -4516,13 +4523,27 @@ def update_ai_reply_settings(cookie_id: str, settings: AIReplySettings, current_
             raise HTTPException(status_code=500, detail='CookieManager 未就绪')
 
         # 保存设置
-        settings_dict = settings.dict()
-        success = db_manager.save_ai_reply_settings(cookie_id, settings_dict)
+        settings_dict = settings.dict(exclude_unset=True)  # 仅保留请求显式传入字段
+        existing_settings = db_manager.get_ai_reply_settings_raw(cookie_id)  # 账号级原始配置
+        if existing_settings is None:
+            existing_settings = {
+                'ai_enabled': False,
+                'model_name': '',
+                'api_key': '',
+                'base_url': '',
+                'max_discount_percent': 10,
+                'max_discount_amount': 100,
+                'max_bargain_rounds': 3,
+                'custom_prompts': ''
+            }  # 未初始化账号的默认配置（保留空值以启用系统级兜底）
+        merged_settings = {**existing_settings, **settings_dict}  # 合并账号现有配置与本次更新字段
+        success = db_manager.save_ai_reply_settings(cookie_id, merged_settings)
 
         if success:
 
             # 如果启用了AI回复，记录日志
-            if settings.ai_enabled:
+            ai_enabled = bool(merged_settings.get('ai_enabled'))  # 是否启用 AI 回复
+            if ai_enabled:
                 logger.info(f"账号 {cookie_id} 启用AI回复")
             else:
                 logger.info(f"账号 {cookie_id} 禁用AI回复")

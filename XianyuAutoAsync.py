@@ -736,7 +736,8 @@ class XianyuLive:
         self.processed_message_ids = {}  # 存储已处理的消息ID和时间戳 {message_id: timestamp}
         self.processed_message_ids_lock = asyncio.Lock()  # 消息ID去重的锁
         self.processed_message_ids_max_size = 10000  # 最大保存10000个消息ID，防止内存泄漏
-        self.message_expire_time = 3600  # 消息过期时间（秒），默认1小时后可以重复回复
+        # 消息去重时间窗（秒）：同一message_id在该窗口内只处理一次，超时后允许再次回复；业务约束：需为正数
+        self.message_expire_time = 3
 
         # 初始化订单状态处理器
         self._init_order_status_handler()

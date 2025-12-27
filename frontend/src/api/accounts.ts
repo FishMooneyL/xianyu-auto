@@ -164,18 +164,39 @@ export const getAIReplySettings = (cookieId: string): Promise<AIReplySettings> =
   return get(`/ai-reply-settings/${cookieId}`)
 }
 
-// 更新AI回复设置
+/**
+ * 用途：更新账号的 AI 回复设置
+ *
+ * 入参：
+ *  - cookieId: 账号 ID
+ *  - settings: 需要更新的 AI 设置（局部字段）
+ * 返回值：ApiResponse
+ * 业务约束：仅提交显式传入字段，避免覆盖系统级默认配置
+ */
 export const updateAIReplySettings = (cookieId: string, settings: Partial<AIReplySettings>): Promise<ApiResponse> => {
   // 转换字段名以匹配后端
-  const payload: Record<string, unknown> = {
-    ai_enabled: settings.ai_enabled ?? settings.enabled ?? false,
-    model_name: settings.model_name ?? 'qwen-plus',
-    api_key: settings.api_key ?? '',
-    base_url: settings.base_url ?? 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    max_discount_percent: settings.max_discount_percent ?? 10,
-    max_discount_amount: settings.max_discount_amount ?? 100,
-    max_bargain_rounds: settings.max_bargain_rounds ?? 3,
-    custom_prompts: settings.custom_prompts ?? '',
+  const aiEnabled = settings.ai_enabled ?? settings.enabled ?? false // AI 回复开关（后端必填字段）
+  const payload: Record<string, unknown> = { ai_enabled: aiEnabled } // 仅携带显式更新字段
+  if (settings.model_name !== undefined) {
+    payload.model_name = settings.model_name
+  }
+  if (settings.api_key !== undefined) {
+    payload.api_key = settings.api_key
+  }
+  if (settings.base_url !== undefined) {
+    payload.base_url = settings.base_url
+  }
+  if (settings.max_discount_percent !== undefined) {
+    payload.max_discount_percent = settings.max_discount_percent
+  }
+  if (settings.max_discount_amount !== undefined) {
+    payload.max_discount_amount = settings.max_discount_amount
+  }
+  if (settings.max_bargain_rounds !== undefined) {
+    payload.max_bargain_rounds = settings.max_bargain_rounds
+  }
+  if (settings.custom_prompts !== undefined) {
+    payload.custom_prompts = settings.custom_prompts
   }
   return put(`/ai-reply-settings/${cookieId}`, payload)
 }

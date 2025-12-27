@@ -1826,11 +1826,47 @@ class DBManager:
                 self.conn.rollback()
                 return False
 
+    def get_ai_reply_settings_raw(self, cookie_id: str) -> Optional[dict]:
+        """用途：获取账号级 AI 回复设置（不做系统设置兜底）
+
+        入参：
+            cookie_id: 账号 ID
+        返回值：账号存在时返回配置字典，否则返回 None
+        业务约束：仅读取 ai_reply_settings 表的原始值，不合并系统级默认配置
+        """
+        with self.lock:
+            try:
+                cursor = self.conn.cursor()  # 数据库游标，用于读取账号级 AI 配置
+                cursor.execute('''
+                SELECT ai_enabled, model_name, api_key, base_url,
+                       max_discount_percent, max_discount_amount, max_bargain_rounds,
+                       custom_prompts
+                FROM ai_reply_settings WHERE cookie_id = ?
+                ''', (cookie_id,))
+                result = cursor.fetchone()  # 单账号查询结果
+                if not result:
+                    return None
+                return {
+                    'ai_enabled': bool(result[0]),
+                    'model_name': result[1],
+                    'api_key': result[2],
+                    'base_url': result[3],
+                    'max_discount_percent': result[4],
+                    'max_discount_amount': result[5],
+                    'max_bargain_rounds': result[6],
+                    'custom_prompts': result[7]
+                }
+            except Exception as e:
+                logger.error(f"获取账号级AI回复设置失败: {e}")
+                return None
+
     def get_ai_reply_settings(self, cookie_id: str) -> dict:
-        """获取AI回复设置
-        
-        优先使用账号级别的设置，如果账号没有配置api_key/base_url/model_name，
-        则从系统设置中读取全局AI配置作为默认值
+        """用途：获取AI回复设置（含系统级兜底）
+
+        入参：
+            cookie_id: 账号 ID
+        返回值：AI 回复设置字典
+        业务约束：账号未配置 api_key 时，模型与地址统一使用系统配置，避免历史默认值干扰
         """
         with self.lock:
             try:
@@ -1843,19 +1879,28 @@ class DBManager:
                 ''', (cookie_id,))
 
                 result = cursor.fetchone()
-                
+
                 # 获取系统级别的AI设置作为默认值
-                system_api_key = self.get_system_setting('ai_api_key') or ''
-                system_base_url = self.get_system_setting('ai_api_url') or 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-                system_model = self.get_system_setting('ai_model') or 'qwen-plus'
-                
+                system_api_key = self.get_system_setting('ai_api_key') or ''  # 系统级 API Key
+                system_base_url = self.get_system_setting('ai_api_url') or 'https://dashscope.aliyuncs.com/compatible-mode/v1'  # 系统级 API 地址
+                system_model = self.get_system_setting('ai_model') or 'qwen-plus'  # 系统级模型名称
+
                 if result:
+                    account_api_key = result[2] or ''  # 账号级 API Key（空表示走系统配置）
+                    account_base_url = result[3] or ''  # 账号级 API 地址
+                    account_model = result[1] or ''  # 账号级模型名称
+                    use_system_ai = not account_api_key  # 业务约束：账号未配置 Key 时，统一使用系统级模型与地址
+
+                    api_key = account_api_key if account_api_key else system_api_key  # 实际使用的 API Key
+                    base_url = system_base_url if use_system_ai else (account_base_url or system_base_url)  # 实际使用的 API 地址
+                    model_name = system_model if use_system_ai else (account_model or system_model)  # 实际使用的模型名称
+
                     # 账号有设置，但如果api_key/base_url/model_name为空，使用系统设置
                     return {
                         'ai_enabled': bool(result[0]),
-                        'model_name': result[1] if result[1] else system_model,
-                        'api_key': result[2] if result[2] else system_api_key,
-                        'base_url': result[3] if result[3] else system_base_url,
+                        'model_name': model_name,
+                        'api_key': api_key,
+                        'base_url': base_url,
                         'max_discount_percent': result[4],
                         'max_discount_amount': result[5],
                         'max_bargain_rounds': result[6],
